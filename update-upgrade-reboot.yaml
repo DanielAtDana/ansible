@@ -3,18 +3,44 @@
   hosts: all
   become: true
   tasks:
+    - name: Check for and kill any existing apt/dpkg processes
+      shell: |
+        pkill -f apt
+        pkill -f dpkg
+      ignore_errors: yes
+
+    - name: Remove lock files if they exist
+      shell: |
+        rm -f /var/lib/dpkg/lock
+        rm -f /var/lib/dpkg/lock-frontend
+        rm -f /var/lib/apt/lists/lock
+        rm -f /var/cache/apt/archives/lock
+      ignore_errors: yes
+
+    - name: Reconfigure dpkg
+      shell: |
+        dpkg --configure -a
+      ignore_errors: yes
+
     - name: Update apt cache
       apt:
         update_cache: yes
-        cache_valid_time: 3600  # Consider cache valid for 1 hour
+        cache_valid_time: 3600
+      register: apt_update
+      retries: 3
+      delay: 5
+      until: apt_update is success
 
     - name: Perform dist-upgrade
       apt:
         upgrade: dist
         force_apt_get: yes
-        autoremove: yes  # Remove unused packages
-        autoclean: yes   # Clear out the local repository
+        autoremove: yes
+        autoclean: yes
       register: upgrade_result
+      retries: 3
+      delay: 5
+      until: upgrade_result is success
 
     - name: Check if reboot is required
       stat:
