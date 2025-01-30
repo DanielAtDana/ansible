@@ -2,36 +2,50 @@
 - name: Update Ubuntu systems and reboot if necessary
   hosts: all
   become: true
+  gather_facts: yes
   tasks:
-    - name: Check for and kill any existing apt/dpkg processes
+    - name: Ensure we're running as root
+      debug:
+        msg: "Running as user {{ ansible_user_id }}"
+
+    - name: Wait for any unattended-upgrade to finish
+      shell: while sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1; do sleep 5; done;
+      changed_when: false
+
+    - name: Wait for any apt-get operations to finish
+      shell: while sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do sleep 5; done;
+      changed_when: false
+
+    - name: Kill any existing apt/dpkg processes
       shell: |
-        pkill -f apt
-        pkill -f dpkg
+        sudo killall apt apt-get dpkg
       ignore_errors: yes
+      changed_when: false
 
     - name: Remove lock files if they exist
       shell: |
-        rm -f /var/lib/dpkg/lock
-        rm -f /var/lib/dpkg/lock-frontend
-        rm -f /var/lib/apt/lists/lock
-        rm -f /var/cache/apt/archives/lock
+        sudo rm -f /var/lib/apt/lists/lock
+        sudo rm -f /var/cache/apt/archives/lock
+        sudo rm -f /var/lib/dpkg/lock*
       ignore_errors: yes
 
     - name: Reconfigure dpkg
       shell: |
-        dpkg --configure -a
+        sudo dpkg --configure -a
       ignore_errors: yes
 
     - name: Update apt cache
+      become: yes
       apt:
         update_cache: yes
         cache_valid_time: 3600
       register: apt_update
       retries: 3
-      delay: 5
+      delay: 10
       until: apt_update is success
 
     - name: Perform dist-upgrade
+      become: yes
       apt:
         upgrade: dist
         force_apt_get: yes
@@ -39,7 +53,7 @@
         autoclean: yes
       register: upgrade_result
       retries: 3
-      delay: 5
+      delay: 10
       until: upgrade_result is success
 
     - name: Check if reboot is required
