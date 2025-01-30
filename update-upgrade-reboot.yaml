@@ -12,6 +12,8 @@
       apt:
         upgrade: dist
         force_apt_get: yes
+        autoremove: yes  # Remove unused packages
+        autoclean: yes   # Clear out the local repository
       register: upgrade_result
 
     - name: Check if reboot is required
